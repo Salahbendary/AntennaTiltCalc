@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Antenna Downtilt Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4f8;
+  --white:#ffffff;
+  --border:#dde3ec;
+  --text:#1e293b;
+  --muted:#64748b;
+  --muted2:#94a3b8;
+  --accent:#0ea5e9;
+  --green:#16a34a;
+  --orange:#f97316;
+  --red:#dc2626;
+  --teal:#0d9488;
+  --card-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:13.5px;min-height:100vh;}
+
+.page{max-width:1140px;margin:0 auto;padding:24px 18px 60px;}
+
+/* ── Header ── */
+.hdr{margin-bottom:24px;}
+.hdr-inner{display:flex;align-items:center;gap:10px;margin-bottom:3px;}
+.hdr-icon{width:30px;height:30px;background:#0ea5e9;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;}
+.hdr h1{font-size:1.25rem;font-weight:700;color:var(--text);}
+.hdr p{color:var(--muted);font-size:0.82rem;padding-left:40px;}
+
+/* ── Layout ── */
+.layout{display:grid;grid-template-columns:288px 1fr;gap:18px;align-items:start;}
+@media(max-width:720px){.layout{grid-template-columns:1fr;}}
+
+/* ── Cards ── */
+.card{background:var(--white);border-radius:10px;box-shadow:var(--card-shadow);padding:18px;margin-bottom:14px;}
+.card-title{font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:14px;}
+
+/* ── Form ── */
+.field{margin-bottom:11px;}
+.field label{display:block;font-size:0.76rem;font-weight:500;color:var(--muted);margin-bottom:4px;}
+.field input[type=number]{
+  width:100%;background:#f8fafc;border:1px solid var(--border);border-radius:6px;
+  padding:7px 10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+  outline:none;transition:border .15s,box-shadow .15s;
+}
+.field input:focus{border-color:#0ea5e9;box-shadow:0 0 0 3px rgba(14,165,233,0.12);}
+.unit-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;}
+.ubtn{
+  padding:6px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;
+  color:var(--muted);font-size:0.72rem;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;
+}
+.ubtn.on{border-color:#0ea5e9;background:#eff6ff;color:#0284c7;font-weight:600;}
+.chk-row{
+  display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
+  background:#f8fafc;border:1px solid var(--border);border-radius:7px;margin-bottom:10px;cursor:pointer;
+}
+.chk-row input[type=checkbox]{width:15px;height:15px;accent-color:#0ea5e9;margin-top:1px;flex-shrink:0;cursor:pointer;}
+.chk-row .tl{font-size:0.78rem;font-weight:500;color:var(--text);}
+.chk-row .td{font-size:0.7rem;color:var(--muted);margin-top:2px;line-height:1.4;}
+.tblock{display:none;}
+.tblock.show{display:block;}
+
+/* Buttons */
+.btn{display:block;width:100%;padding:9px;border-radius:7px;font-size:0.76rem;font-weight:600;cursor:pointer;transition:all .15s;text-align:center;}
+.btn-primary{background:#0ea5e9;border:none;color:#fff;margin-bottom:7px;}
+.btn-primary:hover{background:#0284c7;}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed;}
+.btn-secondary{background:#fff;border:1px solid var(--border);color:var(--muted);}
+.btn-secondary:hover{border-color:var(--muted2);color:var(--text);}
+
+/* dist badge */
+.dbadge{display:inline-block;margin-left:6px;font-family:'JetBrains Mono',monospace;font-size:0.68rem;
+  color:#0284c7;background:#eff6ff;border:1px solid #bae6fd;border-radius:4px;padding:1px 6px;}
+
+/* ── Status bar ── */
+.sbar{
+  display:flex;align-items:center;gap:8px;padding:8px 13px;background:var(--white);
+  border:1px solid var(--border);border-radius:7px;margin-bottom:14px;
+  font-family:'JetBrains Mono',monospace;font-size:0.69rem;color:var(--muted);min-height:34px;
+}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sdot.idle{background:var(--muted2);}
+.sdot.load{background:#f59e0b;animation:blink .65s infinite;}
+.sdot.ok{background:#22c55e;}
+.sdot.err{background:#ef4444;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── Metric cards ── */
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.mcard{background:var(--white);border-radius:9px;box-shadow:var(--card-shadow);padding:14px 16px;}
+.mlabel{font-size:0.62rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:5px;}
+.mval{font-family:'JetBrains Mono',monospace;font-size:1.35rem;font-weight:700;color:#0d9488;line-height:1.1;margin-bottom:3px;}
+.msub{font-size:0.7rem;color:var(--muted);}
+
+/* ── Section titles ── */
+.sec-hdr{font-size:0.95rem;font-weight:700;color:var(--text);margin:18px 0 10px;display:flex;align-items:center;gap:8px;}
+.sec-hdr::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── Chart card ── */
+.chart-card{background:var(--white);border-radius:10px;box-shadow:var(--card-shadow);padding:16px;margin-bottom:14px;}
+.chart-topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
+.chart-topbar-title{font-weight:700;font-size:0.95rem;color:var(--text);}
+#chartWrap{position:relative;width:100%;height:300px;}
+canvas#mainChart{width:100%!important;height:100%!important;}
+
+/* ── Chart Legend ── */
+.chart-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:0.72rem;color:var(--muted);font-weight:500;}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.leg-line{width:22px;height:2.5px;border-radius:2px;flex-shrink:0;}
+.leg-dash{width:22px;height:0;border-top:2.5px dashed;flex-shrink:0;}
+
+/* ── Slider section ── */
+.slider-section{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:10px;}
+.slider-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.slider-title{font-size:0.72rem;font-weight:600;color:var(--muted);}
+.slider-info{display:flex;gap:14px;}
+.sinfo-val{font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--text);}
+.sinfo-val span{color:var(--muted);}
+input[type=range]{width:100%;accent-color:#0ea5e9;cursor:pointer;}
+.slider-axis{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--muted2);margin-top:3px;}
+
+/* ── Terrain stats ── */
+.tstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;}
+.tst{background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:9px;text-align:center;}
+.tst-val{font-family:'JetBrains Mono',monospace;font-size:0.92rem;font-weight:700;color:#d97706;}
+.tst-lbl{font-size:0.6rem;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-top:2px;}
+
+/* ── Assumption note ── */
+.assume{font-size:0.72rem;color:var(--muted);background:#f8fafc;border:1px solid var(--border);
+  border-radius:6px;padding:8px 12px;margin-bottom:14px;line-height:1.55;}
+.assume code{background:#eff6ff;color:#0284c7;padding:1px 5px;border-radius:3px;
+  font-family:'JetBrains Mono',monospace;font-size:0.68rem;}
+
+/* ── Map ── */
+.map-card{background:var(--white);border-radius:10px;box-shadow:var(--card-shadow);overflow:hidden;margin-bottom:10px;}
+.map-hdr{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.map-hdr-title{font-weight:700;font-size:0.95rem;color:var(--text);}
+#map{height:320px;background:#e8f4f8;}
+.map-footer{padding:8px 14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.map-meta{font-family:'JetBrains Mono',monospace;font-size:0.66rem;color:var(--muted);}
+
+/* ── Map legend (Sector Metrics) ── */
+.map-legend{padding:12px 16px;border-top:1px solid var(--border);background:#f8fafc;}
+.map-legend-title{font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;}
+.map-legend-items{display:flex;flex-wrap:wrap;gap:14px;}
+.mleg{display:flex;align-items:center;gap:6px;font-size:0.74rem;color:var(--muted);font-weight:500;}
+.mleg-box{width:14px;height:14px;border-radius:3px;flex-shrink:0;border:1.5px solid;}
+.sector-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+.sm{background:var(--white);border:1px solid var(--border);border-radius:6px;padding:9px 12px;}
+.sm-lbl{font-size:0.64rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:3px;}
+.sm-val{font-family:'JetBrains Mono',monospace;font-size:0.9rem;font-weight:700;color:var(--text);}
+
+.btn-kmz{padding:7px 14px;border:1px solid var(--border);border-radius:6px;background:#fff;
+  color:var(--muted);font-size:0.72rem;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px;}
+.btn-kmz:hover{border-color:#0ea5e9;color:#0284c7;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-inner">
+      <div class="hdr-icon">📡</div>
+      <h1>Antenna Downtilt Calculator</h1>
+    </div>
+    <p>Calculate main lobe impact and ground footprint with an interactive RF visual.</p>
+  </div>
+
+  <div class="layout">
+
+    <!-- ═══ LEFT: INPUTS ═══ -->
+    <div>
+      <div class="card">
+        <div class="card-title">Inputs</div>
+        <p style="font-size:.76rem;color:var(--muted);margin-bottom:12px;">Set basic RF parameters:</p>
+
+        <div style="font-size:.75rem;font-weight:500;color:var(--muted);margin-bottom:5px;">Unit System</div>
+        <div class="unit-row">
+          <button class="ubtn on" id="bM" onclick="setUnits('metric')">Metric (m, km)</button>
+          <button class="ubtn"    id="bU" onclick="setUnits('us')">USA (ft, mi)</button>
+        </div>
+
+        <div class="field">
+          <label id="lblH">Antenna Height (m)</label>
+          <input type="number" id="iH" value="30" min="1" step="1" oninput="onChange()"/>
+        </div>
+        <div class="field">
+          <label>Downtilt (deg)</label>
+          <input type="number" id="iDT" value="6" min="0.1" max="89" step="0.5" oninput="onChange()"/>
+        </div>
+        <div class="field">
+          <label>Vertical Beamwidth (deg)</label>
+          <input type="number" id="iVBW" value="6" min="1" max="90" step="0.5" oninput="onChange()"/>
+        </div>
+        <div class="field">
+          <label>Horizontal Beamwidth (deg)</label>
+          <input type="number" id="iHBW" value="65" min="1" max="360" step="1" oninput="onChange()"/>
+        </div>
+        <div class="field">
+          <label id="lblD">Distance (m) <span class="dbadge" id="dbadge">5000 m</span></label>
+          <input type="number" id="iDist" value="5000" min="100" max="150000" step="100" oninput="onChange()"/>
+        </div>
+
+        <label class="chk-row" for="chkT">
+          <input type="checkbox" id="chkT" onchange="toggleTerrain()"/>
+          <div>
+            <div class="tl">Include elevation profile</div>
+            <div class="td">Uses site coordinates + azimuth and current distance value as profile length.</div>
+          </div>
+        </label>
+
+        <div class="tblock" id="tBlock">
+          <div class="field"><label>Site Latitude (deg)</label><input type="number" id="iLat" value="30.0028686" step="0.000001"/></div>
+          <div class="field"><label>Site Longitude (deg)</label><input type="number" id="iLon" value="31.0719953" step="0.000001"/></div>
+          <div class="field"><label>Antenna Azimuth (deg)</label><input type="number" id="iAz" value="80" min="0" max="360" step="1"/></div>
+          <button class="btn btn-primary" id="btnFetch" onclick="fetchDEM()">↻ Fetch Elevation Profile</button>
+        </div>
+
+        <button class="btn btn-secondary" onclick="doReset()">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- ═══ RIGHT: RESULTS ═══ -->
+    <div>
+
+      <!-- Status -->
+      <div class="sbar"><div class="sdot idle" id="sdot"></div><span id="stxt">Ready to calculate.</span></div>
+
+      <!-- Metrics -->
+      <div class="metrics">
+        <div class="mcard">
+          <div class="mlabel">Main Lobe Impact Point</div>
+          <div class="mval" id="mMain">—</div>
+          <div class="msub" id="mMainSub">Ground intersection of central lobe.</div>
+        </div>
+        <div class="mcard">
+          <div class="mlabel">Footprint Coverage</div>
+          <div class="mval" id="mFoot" style="font-size:1.05rem;">—</div>
+          <div class="msub" id="mFootSub">Ground span covered by lobe.</div>
+        </div>
+      </div>
+
+      <!-- Assumption -->
+      <div class="assume" id="aNote">
+        <strong>Assumption:</strong> Vertical beamwidth defaults to <code>6 deg</code>, but you can modify it. Unit system: Metric (m/km).
+      </div>
+
+      <!-- Visual Profile Chart -->
+      <div class="sec-hdr">Visual Profile</div>
+      <div class="chart-card">
+        <div id="chartWrap"><canvas id="mainChart"></canvas></div>
+
+        <!-- Chart Legend -->
+        <div class="chart-legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Main lobe ray</div>
+          <div class="leg-item"><div class="leg-dash" style="border-color:#7dd3fc;color:#7dd3fc"></div>Footprint lobe limits</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#f97316"></div>Ground footprint</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#dc2626"></div>Selected distance</div>
+        </div>
+
+        <!-- Slider -->
+        <div class="slider-section">
+          <div class="slider-hdr">
+            <span class="slider-title">Footprint vs selected distance</span>
+            <div class="slider-info">
+              <div class="sinfo-val"><span>Pos: </span><span id="slPos">0 m</span></div>
+              <div class="sinfo-val"><span>Elev: </span><span id="slElev" style="color:#0ea5e9">— m</span></div>
+              <div class="sinfo-val"><span id="slFoot" style="color:#16a34a"></span></div>
+            </div>
+          </div>
+          <input type="range" id="slider" min="0" max="5000" step="10" value="0" oninput="onSlider()"/>
+          <div class="slider-axis"><span>0 m</span><span id="slMax">5000 m</span></div>
+        </div>
+
+        <!-- Terrain stats (shown after DEM fetch) -->
+        <div class="tstats" id="tstats" style="display:none">
+          <div class="tst"><div class="tst-val" id="tsAvg">—</div><div class="tst-lbl">Avg Signal</div></div>
+          <div class="tst"><div class="tst-val" id="tsSh">—</div><div class="tst-lbl">Shadowed</div></div>
+          <div class="tst"><div class="tst-val" id="tsObs">—</div><div class="tst-lbl">1st Obstruct</div></div>
+          <div class="tst"><div class="tst-val" id="tsN">—</div><div class="tst-lbl">DEM Pts</div></div>
+        </div>
+      </div>
+
+      <!-- Sector Map -->
+      <div class="sec-hdr">Sector Map (OSM)</div>
+      <div class="map-card">
+        <div class="map-hdr">
+          <span class="map-hdr-title">Sector Map (OSM)</span>
+          <button class="btn-kmz" onclick="exportKML()">⬇ Export Sector KMZ</button>
+        </div>
+        <div id="map"></div>
+
+        <!-- Map Legend — Sector Metrics -->
+        <div class="map-legend">
+          <div class="map-legend-title">Sector Metrics</div>
+          <div class="map-legend-items">
+            <div class="mleg"><div class="mleg-box" style="background:rgba(14,165,233,0.12);border-color:#0ea5e9;"></div>Sector outline</div>
+            <div class="mleg"><div class="mleg-box" style="background:rgba(74,222,128,0.25);border-color:#4ade80;"></div>Footprint zone</div>
+            <div class="mleg"><div class="mleg-box" style="background:#0ea5e9;border-color:#0ea5e9;border-radius:50%;width:10px;height:10px;margin-left:2px;"></div>Antenna Site</div>
+            <div class="mleg"><div class="mleg-box" style="background:#4ade80;border-color:#4ade80;border-radius:50%;width:10px;height:10px;margin-left:2px;"></div>Main Lobe Hit</div>
+          </div>
+          <div class="sector-metrics">
+            <div class="sm"><div class="sm-lbl">Main Lobe</div><div class="sm-val" id="smMain">—</div></div>
+            <div class="sm"><div class="sm-lbl">Footprint</div><div class="sm-val" id="smFoot" style="font-size:0.78rem;">—</div></div>
+          </div>
+        </div>
+
+        <div class="map-footer">
+          <span class="map-meta" id="mapMeta">Waiting for valid site coordinate and azimuth.</span>
+        </div>
+      </div>
+
+    </div><!-- /right -->
+  </div><!-- /layout -->
+</div><!-- /page -->
+
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────
+var G = {
+  units: 'metric',
+  terrainOn: false,
+  dem: [],           // [{d, elev}]
+  chart: null,
+  sliderD: 0,
+  leafMap: null,
+  leafLayer: null,
+  mainD: null, nearD: null, farD: null,
+  distM: 5000
+};
+
+// ── Units ───────────────────────────────────────────
+function toM(v){ return G.units==='metric'?+v:+v*0.3048; }
+function fmtD(m,dec){
+  dec = dec===undefined?2:dec;
+  if(G.units==='metric') return m>=1000?(m/1000).toFixed(dec)+' km':Math.round(m)+' m';
+  var ft=m/0.3048; return ft>=5280?(ft/5280).toFixed(dec)+' mi':Math.round(ft)+' ft';
+}
+function setUnits(u){
+  G.units=u;
+  document.getElementById('bM').classList.toggle('on',u==='metric');
+  document.getElementById('bU').classList.toggle('on',u==='us');
+  document.getElementById('lblH').textContent = u==='metric'?'Antenna Height (m)':'Antenna Height (ft)';
+  document.getElementById('lblD').innerHTML   = (u==='metric'?'Distance (m) ':'Distance (ft) ')+'<span class="dbadge" id="dbadge">—</span>';
+  updateBadge(); runCalc();
+}
+function updateBadge(){
+  var el=document.getElementById('dbadge');
+  if(el) el.textContent=fmtD(toM(parseFloat(document.getElementById('iDist').value)||5000));
+}
+
+// ── Geometry ────────────────────────────────────────
+function flatGeom(hM,dt,vbw){
+  var d=dt*Math.PI/180, h=vbw/2*Math.PI/180;
+  var mainD=hM/Math.tan(d);
+  var nearD=hM/Math.tan(d+h);
+  var fa=d-h; if(fa<0.0002)fa=0.0002;
+  return {mainD:mainD,nearD:nearD,farD:hM/Math.tan(fa)};
+}
+function rayIntersect(hM,siteElev,angleDeg,dem){
+  var dt=angleDeg*Math.PI/180;
+  for(var i=1;i<dem.length;i++){
+    var d0=dem[i-1].d,e0=dem[i-1].elev,d1=dem[i].d,e1=dem[i].elev;
+    var r0=siteElev+hM-d0*Math.tan(dt),r1=siteElev+hM-d1*Math.tan(dt);
+    if(r0>=e0&&r1<=e1){var t=(r0-e0)/((r0-r1)+(e1-e0));return d0+t*(d1-d0);}
+  }
+  return null;
+}
+function gcDest(lat,lon,bear,distM){
+  var R=6371000,b=bear*Math.PI/180,dR=distM/R;
+  var la1=lat*Math.PI/180,lo1=lon*Math.PI/180;
+  var la2=Math.asin(Math.sin(la1)*Math.cos(dR)+Math.cos(la1)*Math.sin(dR)*Math.cos(b));
+  var lo2=lo1+Math.atan2(Math.sin(b)*Math.sin(dR)*Math.cos(la1),Math.cos(dR)-Math.sin(la1)*Math.sin(la2));
+  return[la2*180/Math.PI,lo2*180/Math.PI];
+}
+
+// ── Interpolate DEM ─────────────────────────────────
+function demAt(d){
+  if(!G.dem.length) return 0;
+  var maxD=G.dem[G.dem.length-1].d;
+  var fi=d/maxD*(G.dem.length-1);
+  var lo=Math.min(Math.floor(fi),G.dem.length-1);
+  var hi=Math.min(lo+1,G.dem.length-1);
+  return G.dem[lo].elev*(1-(fi-lo))+G.dem[hi].elev*(fi-lo);
+}
+
+// ── Main calc ───────────────────────────────────────
+function onChange(){ updateBadge(); runCalc(); }
+function runCalc(){
+  var hM   = toM(parseFloat(document.getElementById('iH').value)||30);
+  var dt   = parseFloat(document.getElementById('iDT').value)||6;
+  var vbw  = parseFloat(document.getElementById('iVBW').value)||6;
+  var hbw  = parseFloat(document.getElementById('iHBW').value)||65;
+  var distM= toM(parseFloat(document.getElementById('iDist').value)||5000);
+  G.distM=distM;
+
+  var flat=flatGeom(hM,dt,vbw);
+  var mainD=flat.mainD,nearD=flat.nearD,farD=flat.farD;
+  var hasTerrain=G.terrainOn&&G.dem.length>1;
+
+  if(hasTerrain){
+    var se=G.dem[0].elev;
+    mainD=rayIntersect(hM,se,dt,G.dem)||flat.mainD;
+    nearD=rayIntersect(hM,se,dt+vbw/2,G.dem)||flat.nearD;
+    farD =rayIntersect(hM,se,Math.max(0.05,dt-vbw/2),G.dem)||flat.farD;
+  }
+
+  G.mainD=mainD; G.nearD=nearD; G.farD=farD;
+
+  // metrics
+  document.getElementById('mMain').textContent = fmtD(mainD);
+  document.getElementById('mFoot').textContent = fmtD(nearD)+' to '+fmtD(farD);
+  document.getElementById('mMainSub').textContent = (hasTerrain?'Terrain-adjusted | ':'')+'Central lobe ground intersection.';
+  document.getElementById('mFootSub').textContent = 'VBW '+vbw+'° | Width: '+fmtD(farD-nearD);
+  document.getElementById('smMain').textContent   = fmtD(mainD);
+  document.getElementById('smFoot').textContent   = fmtD(nearD)+' to '+fmtD(farD);
+
+  // assumption note
+  document.getElementById('aNote').innerHTML =
+    '<strong>Assumption:</strong> Vertical beamwidth defaults to <code>'+vbw+' deg</code>. Unit system: '
+    +(G.units==='metric'?'Metric (m/km)':'USA (ft/mi)')+'.';
+
+  // ── Live terrain stats — recomputed on every input change ──
+  if(hasTerrain){
+    var se_s=G.dem[0].elev;
+    var above_s=0, firstObs_s=null;
+    for(var k=0;k<G.dem.length;k++){
+      var rz_s=se_s+hM-G.dem[k].d*Math.tan(dt*Math.PI/180);
+      if(rz_s>=G.dem[k].elev){ above_s++; }
+      else if(firstObs_s===null){ firstObs_s=G.dem[k].d; }
+    }
+    var avgSig_s=Math.round(above_s/G.dem.length*100);
+    var shadow_s=100-avgSig_s;
+    document.getElementById('tsAvg').textContent=avgSig_s+'%';
+    document.getElementById('tsSh').textContent=shadow_s+'%';
+    document.getElementById('tsObs').textContent=firstObs_s!==null?fmtD(firstObs_s):'None';
+    document.getElementById('tsN').textContent=G.dem.length;
+    document.getElementById('tstats').style.display='grid';
+    var obsStr_s=firstObs_s!==null?fmtD(firstObs_s):'None';
+    setStatus('ok',
+      'Elevation: '+G.dem.length+' DEM samples · '+
+      'Avg signal: '+avgSig_s+'% · '+
+      'Shadowed: '+shadow_s+'% · '+
+      '1st obstruction: '+obsStr_s);
+  } else {
+    document.getElementById('tstats').style.display='none';
+    setStatus('idle','Flat model | h='+fmtD(hM)+' AGL | Main lobe='+fmtD(mainD));
+  }
+
+  // update slider range
+  var sl=document.getElementById('slider');
+  sl.max=distM; sl.step=Math.max(1,Math.round(distM/500));
+  if(+sl.value>distM){sl.value=distM;G.sliderD=distM;}
+  document.getElementById('slMax').textContent=fmtD(distM);
+  updateSliderUI(G.sliderD);
+
+  drawChart(hM,dt,vbw,distM,mainD,nearD,farD);
+
+  // map
+  if(hasTerrain){
+    var lat=parseFloat(document.getElementById('iLat').value);
+    var lon=parseFloat(document.getElementById('iLon').value);
+    var az =parseFloat(document.getElementById('iAz').value)||80;
+    if(!isNaN(lat)&&!isNaN(lon)) drawMap(lat,lon,az,hbw,mainD,nearD,farD,distM);
+  }
+}
+
+// ── CHART ───────────────────────────────────────────
+function drawChart(hM,dt,vbw,distM,mainD,nearD,farD){
+  var N=300;
+  var xs=new Array(N+1);
+  for(var k=0;k<=N;k++) xs[k]=k*distM/N;
+
+  var hasTerrain=G.dem.length>1;
+  var siteElev=hasTerrain?G.dem[0].elev:0;
+  var farAngle=Math.max(0.05,dt-vbw/2);
+
+  // Build per-segment coloring arrays for terrain surface
+  // Green = strong signal (ray above terrain), Red = shadowed
+  // The terrain polyline is split into colored segments
+
+  function elevAt(d){ return hasTerrain?demAt(d):siteElev; }
+  function rayZ(d,ang){ return siteElev+hM-d*Math.tan(ang*Math.PI/180); }
+
+  // ── Terrain base data
+  var terrX=[], terrY=[];
+  for(var k=0;k<=N;k++){ terrX.push(xs[k]); terrY.push(elevAt(xs[k])); }
+
+  // ── Signal-coloured terrain line (green/red/orange segments)
+  // Build separate datasets for green, red, orange segments
+  var segGreen=[],segRed=[],segOrange=[];
+  for(var k=0;k<=N;k++){
+    var d=xs[k], te=elevAt(d), rm=rayZ(d,dt), rn=rayZ(d,dt+vbw/2), rf=rayZ(d,farAngle);
+    var inFoot=(d>=nearD&&d<=farD);
+    var mainAbove=(rm>=te);
+    if(inFoot){
+      // in footprint = orange (on ground footprint segment)
+      segOrange.push({x:d,y:te});
+      segGreen.push({x:d,y:null});
+      segRed.push({x:d,y:null});
+    } else if(mainAbove){
+      // main lobe above = strong signal = green
+      segGreen.push({x:d,y:te});
+      segOrange.push({x:d,y:null});
+      segRed.push({x:d,y:null});
+    } else {
+      // shadowed = red
+      segRed.push({x:d,y:te});
+      segGreen.push({x:d,y:null});
+      segOrange.push({x:d,y:null});
+    }
+  }
+
+  // ── Ray lines
+  var mainRay=[],nearRay=[],farRay=[];
+  for(var k=0;k<=N;k++){
+    var d=xs[k];
+    mainRay.push({x:d,y:rayZ(d,dt)});
+    nearRay.push({x:d,y:rayZ(d,dt+vbw/2)});
+    farRay.push({x:d, y:rayZ(d,farAngle)});
+  }
+
+  // ── Slider line
+  var slElev=elevAt(G.sliderD);
+  var slYmin=siteElev-30, slYmax=siteElev+hM+60;
+
+  // ── Signal strength vertical bands (background)
+  // Identify continuous strong/shadow/foot zones
+  // We'll use box annotations via Chart.js plugin — instead use datasets with fill
+
+  var ctx=document.getElementById('mainChart').getContext('2d');
+  if(G.chart){G.chart.destroy();G.chart=null;}
+
+  // Y extents
+  var allY=terrY.concat([siteElev+hM+20]);
+  var yMin=Math.min.apply(null,allY)-15;
+  var yMax=siteElev+hM+40;
+
+  // Vertical zone bands (semi-transparent fill to Y axis top for signal visualization)
+  // We create a vertical shading dataset for each zone type
+  function mkBand(color, alpha, condition){
+    var pts=[];
+    for(var k=0;k<=N;k++){
+      var d=xs[k], te=elevAt(d), rm=rayZ(d,dt);
+      var inFoot=(d>=nearD&&d<=farD);
+      var above=(rm>=te);
+      var ok = condition(inFoot,above);
+      pts.push({x:d, y:ok?yMax:null});
+    }
+    return pts;
+  }
+
+  var bandStrong = mkBand('#bbf7d0',0.18,function(f,a){return a&&!f;});
+  var bandFoot   = mkBand('#fed7aa',0.25,function(f,a){return f;});
+  var bandShadow = mkBand('#fecaca',0.20,function(f,a){return !a&&!f;});
+
+  G.chart = new Chart(ctx,{
+    type:'line',
+    data:{datasets:[
+      // 0: strong signal band (fill from terrain up — green tint)
+      {label:'_strong',data:bandStrong,borderColor:'transparent',
+       backgroundColor:'rgba(187,247,208,0.22)',fill:{target:{value:yMin},above:'rgba(187,247,208,0.22)',below:'transparent'},
+       pointRadius:0,borderWidth:0,tension:0,spanGaps:false,order:20},
+      // 1: footprint band (orange tint)
+      {label:'_foot',data:bandFoot,borderColor:'transparent',
+       backgroundColor:'rgba(254,215,170,0.30)',fill:{target:{value:yMin},above:'rgba(254,215,170,0.30)',below:'transparent'},
+       pointRadius:0,borderWidth:0,tension:0,spanGaps:false,order:19},
+      // 2: shadow band (red tint)
+      {label:'_shadow',data:bandShadow,borderColor:'transparent',
+       backgroundColor:'rgba(254,202,202,0.28)',fill:{target:{value:yMin},above:'rgba(254,202,202,0.28)',below:'transparent'},
+       pointRadius:0,borderWidth:0,tension:0,spanGaps:false,order:18},
+      // 3: Terrain base fill (light teal)
+      {label:'_terrain_base',data:terrX.map(function(d,i){return{x:d,y:terrY[i]};}),
+       borderColor:'#94a3b8',backgroundColor:'rgba(186,230,253,0.35)',
+       fill:{target:{value:yMin},above:'rgba(186,230,253,0.35)'},
+       pointRadius:0,borderWidth:1,tension:0.15,order:15},
+      // 4: Green segments (strong signal on terrain surface)
+      {label:'_gsegs',data:segGreen,borderColor:'#16a34a',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:2.5,tension:0,spanGaps:false,order:8},
+      // 5: Red segments (shadowed)
+      {label:'_rsegs',data:segRed,borderColor:'#dc2626',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:2.5,tension:0,spanGaps:false,order:8},
+      // 6: Orange segments (footprint zone)
+      {label:'_osegs',data:segOrange,borderColor:'#f97316',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:3,tension:0,spanGaps:false,order:7},
+      // 7: Main lobe ray (green)
+      {label:'Main lobe ray',data:mainRay,borderColor:'#16a34a',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:2,tension:0,fill:false,order:4},
+      // 8: Near beam limit (dashed light blue)
+      {label:'Footprint lobe limits',data:nearRay,borderColor:'#7dd3fc',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:1.5,borderDash:[7,5],tension:0,fill:false,order:5},
+      // 9: Far beam limit
+      {label:'_far',data:farRay,borderColor:'#7dd3fc',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:1.5,borderDash:[7,5],tension:0,fill:false,order:5},
+      // 10: Slider line
+      {label:'Selected distance',
+       data:[{x:G.sliderD,y:slYmin},{x:G.sliderD,y:slYmax}],
+       borderColor:'#dc2626',backgroundColor:'transparent',
+       pointRadius:0,borderWidth:1.8,borderDash:[4,3],tension:0,fill:false,order:3},
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:180},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#fff',borderColor:'#e2e8f0',borderWidth:1,
+          titleColor:'#64748b',bodyColor:'#1e293b',
+          titleFont:{family:'JetBrains Mono',size:11},
+          bodyFont:{family:'JetBrains Mono',size:11},
+          callbacks:{
+            title:function(it){return 'Distance: '+fmtD(it[0].parsed.x);},
+            label:function(it){
+              if(it.dataset.label.startsWith('_')) return null;
+              if(it.parsed.y===null) return null;
+              return it.dataset.label+': '+it.parsed.y.toFixed(1)+' m';
+            }
+          }
+        }
+      },
+      scales:{
+        x:{type:'linear',
+           title:{display:true,text:'Distance (m)',color:'#94a3b8',font:{family:'Inter',size:11}},
+           ticks:{color:'#94a3b8',maxTicksLimit:8,font:{family:'JetBrains Mono',size:10},
+                  callback:function(v){return fmtD(v,0);}},
+           grid:{color:'rgba(0,0,0,0.05)'},
+           min:0,max:distM},
+        y:{title:{display:true,text:'Elevation (m)',color:'#94a3b8',font:{family:'Inter',size:11}},
+           ticks:{color:'#94a3b8',font:{family:'JetBrains Mono',size:10}},
+           grid:{color:'rgba(0,0,0,0.05)'},
+           min:yMin,max:yMax}
+      }
+    }
+  });
+
+  // ── Antenna dot annotation — draw after chart renders
+  setTimeout(function(){
+    if(!G.chart) return;
+    var meta=G.chart.getDatasetMeta(3); // terrain
+    if(!meta||!meta.data||!meta.data[0]) return;
+    var c=G.chart.canvas, box=G.chart.chartArea;
+    var xScale=G.chart.scales.x, yScale=G.chart.scales.y;
+    var antennaY=siteElev+hM;
+    var px=xScale.getPixelForValue(0), py=yScale.getPixelForValue(antennaY);
+    var ctx2=c.getContext('2d');
+    // Antenna marker
+    ctx2.save();
+    ctx2.beginPath();
+    ctx2.arc(px,py,6,0,2*Math.PI);
+    ctx2.fillStyle='#0ea5e9';
+    ctx2.fill();
+    ctx2.strokeStyle='#fff';ctx2.lineWidth=2;ctx2.stroke();
+    // Main hit dot
+    var hitX=xScale.getPixelForValue(mainD);
+    var hitElev=elevAt(mainD);
+    var hitY=yScale.getPixelForValue(hitElev);
+    ctx2.beginPath();
+    ctx2.arc(hitX,hitY,6,0,2*Math.PI);
+    ctx2.fillStyle='#0d9488';
+    ctx2.fill();
+    ctx2.strokeStyle='#fff';ctx2.lineWidth=2;ctx2.stroke();
+    // AGL label
+    ctx2.font='500 10px Inter';ctx2.fillStyle='#64748b';ctx2.textAlign='left';
+    ctx2.fillText('Antenna '+hM.toFixed(0)+' m AGL',px+10,py-4);
+    // Main hit label
+    ctx2.fillText('Main hit: '+fmtD(mainD),hitX+8,hitY-6);
+    // Info bar at top
+    ctx2.font='500 10px Inter';ctx2.fillStyle='#64748b';ctx2.textAlign='center';
+    ctx2.fillText('Downtilt '+dt+' deg | V-BW '+vbw+' deg',box.left+(box.right-box.left)/2,box.top+14);
+    ctx2.textAlign='right';
+    ctx2.fillText('Green=strong, yellow=weak, red=shadowed by terrain',box.right,box.top+14);
+    ctx2.restore();
+  },100);
+}
+
+// ── SLIDER ──────────────────────────────────────────
+function onSlider(){
+  G.sliderD=parseFloat(document.getElementById('slider').value)||0;
+  updateSliderUI(G.sliderD);
+  // update slider dataset
+  if(G.chart){
+    var hM=toM(parseFloat(document.getElementById('iH').value)||30);
+    var siteElev=G.dem.length?G.dem[0].elev:0;
+    var slYmin=siteElev-30, slYmax=siteElev+hM+60;
+    G.chart.data.datasets[10].data=[{x:G.sliderD,y:slYmin},{x:G.sliderD,y:slYmax}];
+    G.chart.update('none');
+  }
+}
+function updateSliderUI(d){
+  document.getElementById('slPos').textContent=fmtD(d);
+  var elev=G.dem.length?demAt(d):null;
+  document.getElementById('slElev').textContent=elev!==null?elev.toFixed(1)+' m':'— m';
+  var inFoot=(G.nearD&&G.farD&&d>=G.nearD&&d<=G.farD);
+  document.getElementById('slFoot').textContent=inFoot?'✓ In footprint':'';
+}
+
+// ── TERRAIN toggle ───────────────────────────────────
+function toggleTerrain(){
+  G.terrainOn=document.getElementById('chkT').checked;
+  document.getElementById('tBlock').classList.toggle('show',G.terrainOn);
+  if(!G.terrainOn){ G.dem=[]; document.getElementById('tstats').style.display='none'; }
+  runCalc();
+}
+
+// ── OPEN-METEO FETCH ─────────────────────────────────
+async function fetchDEM(){
+  var lat=parseFloat(document.getElementById('iLat').value);
+  var lon=parseFloat(document.getElementById('iLon').value);
+  var az =parseFloat(document.getElementById('iAz').value)||80;
+  var distM=toM(parseFloat(document.getElementById('iDist').value)||5000);
+  if(isNaN(lat)||isNaN(lon)){setStatus('err','Invalid coordinates.');return;}
+
+  setStatus('load','Fetching elevation data from Open-Meteo DEM…');
+  document.getElementById('btnFetch').disabled=true;
+
+  var N=100,R=6371000,lats=[],lons=[];
+  for(var i=0;i<N;i++){
+    var frac=i/(N-1),d=frac*distM,az_r=az*Math.PI/180,dR=d/R;
+    var la1=lat*Math.PI/180,lo1=lon*Math.PI/180;
+    var la2=Math.asin(Math.sin(la1)*Math.cos(dR)+Math.cos(la1)*Math.sin(dR)*Math.cos(az_r));
+    var lo2=lo1+Math.atan2(Math.sin(az_r)*Math.sin(dR)*Math.cos(la1),Math.cos(dR)-Math.sin(la1)*Math.sin(la2));
+    lats.push((la2*180/Math.PI).toFixed(7));
+    lons.push((lo2*180/Math.PI).toFixed(7));
+  }
+
+  try{
+    var url='https://api.open-meteo.com/v1/elevation?latitude='+lats.join(',')+'&longitude='+lons.join(',');
+    var res=await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    var json=await res.json();
+    if(!json.elevation||!json.elevation.length) throw new Error('No elevation data returned');
+
+    G.dem=json.elevation.map(function(e,i){return{d:i*distM/(N-1),elev:e};});
+
+    // Stats are computed live inside runCalc() on every input change
+    runCalc();
+  }catch(e){
+    setStatus('err','Fetch failed: '+e.message);
+  }
+  document.getElementById('btnFetch').disabled=false;
+}
+
+// ── MAP ──────────────────────────────────────────────
+function initMap(){
+  if(G.leafMap) return;
+  G.leafMap=L.map('map',{zoomControl:true}).setView([30.0028686,31.0719953],12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19
+  }).addTo(G.leafMap);
+}
+function drawMap(lat,lon,az,hbw,mainD,nearD,farD,distM){
+  initMap();
+  if(G.leafLayer){G.leafMap.removeLayer(G.leafLayer);G.leafLayer=null;}
+  var half=hbw/2,S=72;
+  var outer=[],inner=[];
+  for(var i=0;i<=S;i++){var b=az-half+i*hbw/S;outer.push(gcDest(lat,lon,b,farD));}
+  for(var i=S;i>=0;i--){var b=az-half+i*hbw/S;inner.push(gcDest(lat,lon,b,nearD));}
+  var pathPts=G.dem.map(function(s){return gcDest(lat,lon,az,s.d);});
+  if(pathPts.length<2) pathPts=[gcDest(lat,lon,az,0),gcDest(lat,lon,az,distM)];
+
+  G.leafLayer=L.layerGroup([
+    L.polygon([[lat,lon]].concat(outer).concat([[lat,lon]]),{color:'#0ea5e9',weight:1.5,fillColor:'#0ea5e9',fillOpacity:0.06}),
+    L.polygon(outer.concat(inner),{color:'#4ade80',weight:2,fillColor:'#4ade80',fillOpacity:0.20}),
+    L.polyline(pathPts,{color:'#f97316',weight:2.2,opacity:0.8,dashArray:'7 5'}),
+    L.polyline([[lat,lon],gcDest(lat,lon,az,mainD)],{color:'#16a34a',weight:1.5,opacity:0.7}),
+    L.circleMarker([lat,lon],{radius:8,color:'#0ea5e9',fillColor:'#0ea5e9',fillOpacity:1,weight:2})
+      .bindPopup('<b>Antenna Site</b><br>'+lat.toFixed(6)+', '+lon.toFixed(6)+'<br>Az: '+az+'°'),
+    L.circleMarker(gcDest(lat,lon,az,mainD),{radius:7,color:'#0d9488',fillColor:'#0d9488',fillOpacity:1,weight:2})
+      .bindPopup('<b>Main Lobe Hit</b><br>'+fmtD(mainD)+' from site')
+  ]).addTo(G.leafMap);
+  G.leafMap.setView([lat,lon],13);
+  document.getElementById('mapMeta').textContent=
+    'Site '+lat.toFixed(6)+', '+lon.toFixed(6)+' | Azimuth '+az+'° | H-BW '+hbw+'° | Radius '+fmtD(farD)+' (2x Main Lobe). Red=outside footprint, Green=footprint range.';
+}
+
+// ── STATUS ───────────────────────────────────────────
+function setStatus(s,msg){
+  var d=document.getElementById('sdot');
+  d.className='sdot '+(s==='load'?'load':s==='ok'?'ok':s==='err'?'err':'idle');
+  document.getElementById('stxt').textContent=msg;
+}
+
+// ── KML EXPORT ───────────────────────────────────────
+function exportKML(){
+  var lat=parseFloat(document.getElementById('iLat').value)||30.0028686;
+  var lon=parseFloat(document.getElementById('iLon').value)||31.0719953;
+  var az=parseFloat(document.getElementById('iAz').value)||80;
+  var hbw=parseFloat(document.getElementById('iHBW').value)||65;
+  if(!G.mainD) return;
+  var half=hbw/2,S=60;
+  function c(b,d){var p=gcDest(lat,lon,b,d);return p[1]+','+p[0]+',0';}
+  var o='',n='';
+  for(var i=0;i<=S;i++){var b=az-half+i*hbw/S;o+=c(b,G.farD)+' ';}
+  for(var i=S;i>=0;i--){var b=az-half+i*hbw/S;n+=c(b,G.nearD)+' ';}
+  var kml='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>\n'+
+    '  <n>Antenna Sector Az'+az+'</n>\n'+
+    '  <Style id="s"><LineStyle><color>ff00a5e9</color><width>2</width></LineStyle><PolyStyle><color>1a00a5e9</color></PolyStyle></Style>\n'+
+    '  <Style id="f"><LineStyle><color>ff80de4a</color><width>2</width></LineStyle><PolyStyle><color>3380de4a</color></PolyStyle></Style>\n'+
+    '  <Placemark><n>Sector</n><styleUrl>#s</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>'+
+    lon+','+lat+',0 '+o+lon+','+lat+',0</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n'+
+    '  <Placemark><n>Footprint</n><styleUrl>#f</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>'+
+    o+n+'</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n'+
+    '  <Placemark><n>Site</n><Point><coordinates>'+lon+','+lat+',0</coordinates></Point></Placemark>\n'+
+    '</Document></kml>';
+  var blob=new Blob([kml],{type:'application/vnd.google-earth.kml+xml'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='antenna_az'+az+'.kml';a.click();
+}
+
+// ── RESET ────────────────────────────────────────────
+function doReset(){
+  ['iH','iDT','iVBW','iHBW','iDist'].forEach(function(id,i){
+    document.getElementById(id).value=[30,6,6,65,5000][i];
+  });
+  document.getElementById('iLat').value=30.0028686;
+  document.getElementById('iLon').value=31.0719953;
+  document.getElementById('iAz').value=80;
+  document.getElementById('chkT').checked=true;
+  G.terrainOn=true; G.dem=[]; G.sliderD=0;
+  document.getElementById('tBlock').classList.add('show');
+  document.getElementById('tstats').style.display='none';
+  document.getElementById('slider').value=0;
+  setStatus('idle','Reset. Ready to calculate.');
+  updateBadge(); runCalc();
+}
+
+// ── BOOT ─────────────────────────────────────────────
+initMap();
+doReset();
+setTimeout(fetchDEM,500);
+</script>
+</body>
+</html>
