@@ -443,7 +443,7 @@ with st.sidebar:
     dt_deg = st.number_input("Downtilt (deg)",           min_value=0.1, max_value=89.0, value=6.0,  step=0.5)
     vbw    = st.number_input("Vertical Beamwidth (deg)", min_value=1.0, max_value=90.0, value=6.0,  step=0.5)
     hbw    = st.number_input("Horizontal Beamwidth (deg)", min_value=1.0, max_value=360.0, value=65.0, step=1.0)
-    d_raw  = st.number_input(d_lbl,  min_value=100.0,  value=5000.0, step=100.0, format="%.0f")
+    d_raw  = st.number_input(d_lbl,  min_value=100.0,  value=1000.0, step=100.0, format="%.0f")
 
     h_m    = to_m(h_raw, units)
     dist_m = to_m(d_raw, units)
