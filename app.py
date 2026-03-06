@@ -1,6 +1,5 @@
 """
 Antenna Downtilt Calculator — Streamlit
-Matches rfuniverse.com/tiltcalculator visual style exactly.
 """
 
 import streamlit as st
@@ -76,6 +75,24 @@ section[data-testid="stSidebar"] .block-container { padding-top:1.4rem; }
 .sm { background:#f8fafc; border:1px solid #dde3ec; border-radius:6px; padding:9px 12px; }
 .sm-lbl { font-size:0.63rem; text-transform:uppercase; letter-spacing:.8px; color:#94a3b8; margin-bottom:3px; }
 .sm-val { font-family:'JetBrains Mono',monospace; font-size:0.88rem; font-weight:700; color:#1e293b; }
+
+/* Click coordinate card */
+.click-card { background:#fff; border:1px solid #dde3ec; border-radius:8px;
+  padding:11px 14px; margin-top:8px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.click-icon { width:30px; height:30px; background:#7c3aed; border-radius:7px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:14px; color:#fff; }
+.click-body { flex:1; min-width:200px; }
+.click-title { font-size:0.65rem; font-weight:600; text-transform:uppercase;
+  letter-spacing:1px; color:#64748b; margin-bottom:6px; }
+.click-fields { display:flex; gap:20px; flex-wrap:wrap; }
+.click-field span { font-size:0.62rem; font-weight:500; color:#94a3b8;
+  text-transform:uppercase; letter-spacing:.7px; display:block; margin-bottom:2px; }
+.click-field { font-family:'JetBrains Mono',monospace; font-size:1rem;
+  font-weight:700; color:#7c3aed; }
+.click-hint { font-size:0.68rem; color:#94a3b8; margin-top:5px; }
+.click-idle { background:#f8fafc; border:1px dashed #dde3ec; border-radius:8px;
+  padding:9px 14px; margin-top:8px; font-size:0.74rem; color:#94a3b8;
+  display:flex; align-items:center; gap:7px; }
 
 #MainMenu, footer { visibility:hidden; }
 .block-container { padding-top:1.6rem; }
@@ -369,6 +386,9 @@ def build_map(lat, lon, az, hbw, main_d, near_d, far_d, dem_d, dist_m):
     folium.CircleMarker(hit, radius=8, color='#0d9488', fill=True,
         fill_color='#0d9488', fill_opacity=1, weight=2,
         popup=folium.Popup(f'<b>Main Lobe Hit</b><br>{fmt_d(main_d,"Metric (m, km)")} from site')).add_to(m)
+    # Clicking anywhere on the map shows a popup with lat/lon
+    # and returns the coordinates to Streamlit via st_folium
+    m.add_child(folium.LatLngPopup())
     return m
 
 # ─────────────────────────────────────────────────────
@@ -584,20 +604,8 @@ if live_stats:
     obs_str = fmt_d(live_stats['first_obs'], units) if live_stats['first_obs'] else "None"
     st.markdown(f"""<div class="tstat-row">
       <div class="tstat">
-        <div class="tstat-val">{live_stats['avg']}%</div>
-        <div class="tstat-lbl">Avg Signal</div>
-      </div>
-      <div class="tstat">
-        <div class="tstat-val">{live_stats['shadow']}%</div>
-        <div class="tstat-lbl">Shadowed Path</div>
-      </div>
-      <div class="tstat">
         <div class="tstat-val">{obs_str}</div>
         <div class="tstat-lbl">1st Obstruction</div>
-      </div>
-      <div class="tstat">
-        <div class="tstat-val">{live_stats['n']}</div>
-        <div class="tstat-lbl">DEM Samples</div>
       </div>
     </div>""", unsafe_allow_html=True)
 
@@ -631,8 +639,41 @@ st.plotly_chart(fig, use_container_width=True,
 st.markdown('<div class="sec-hdr">Sector Map (OSM)</div>', unsafe_allow_html=True)
 st.caption("Sector built from site coordinates, azimuth, horizontal beamwidth, and auto-adjusted distance.")
 
-map_obj = build_map(site_lat, site_lon, az_deg, hbw, main_d, near_d, far_d, dem_d, dist_m)
-st_folium(map_obj, width="100%", height=360, returned_objects=[])
+map_obj  = build_map(site_lat, site_lon, az_deg, hbw, main_d, near_d, far_d, dem_d, dist_m)
+map_data = st_folium(map_obj, width="100%", height=380,
+                     returned_objects=["last_clicked"],
+                     key="sector_map")
+
+# ── Clicked-point display ──────────────────────────────
+_clicked = (map_data or {}).get("last_clicked")
+if _clicked and _clicked.get("lat") is not None:
+    _clat, _clng = _clicked["lat"], _clicked["lng"]
+    # Great-circle distance from antenna site to clicked point
+    _R = 6_371_000.0
+    _dlat = math.radians(_clat - site_lat)
+    _dlon = math.radians(_clng - site_lon)
+    _a   = (math.sin(_dlat/2)**2
+            + math.cos(math.radians(site_lat))
+            * math.cos(math.radians(_clat))
+            * math.sin(_dlon/2)**2)
+    _click_dist = _R * 2 * math.atan2(math.sqrt(_a), math.sqrt(1 - _a))
+    st.markdown(f"""
+<div class="click-card">
+  <div class="click-icon">📍</div>
+  <div class="click-body">
+    <div class="click-title">Selected Point — Map Click</div>
+    <div class="click-fields">
+      <div class="click-field"><span>Latitude</span>{_clat:.6f}°</div>
+      <div class="click-field"><span>Longitude</span>{_clng:.6f}°</div>
+      <div class="click-field"><span>Distance from Site</span>{fmt_d(_click_dist, units)}</div>
+    </div>
+    <div class="click-hint">Click anywhere on the map to update</div>
+  </div>
+</div>""", unsafe_allow_html=True)
+else:
+    st.markdown(
+        '<div class="click-idle">🖱 Click anywhere on the map to see its coordinates and distance from the antenna site</div>',
+        unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────
 # MAP LEGEND — Sector Metrics (also live)
