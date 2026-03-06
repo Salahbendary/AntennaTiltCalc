@@ -22,8 +22,4 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Opens at http://localhost:8501
-
-## Egypt Example (pre-loaded)
-- Lat: 30.0028686 | Lon: 31.0719953 | Azimuth: 80°
-- Click "Fetch Elevation Profile" to load live DEM data
+Opens at http://localhost:8501 or https://antennatiltcalcvodafoneee.streamlit.app/
