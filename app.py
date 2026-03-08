@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
 import zipfile, io, math
+import time
 
 # ─────────────────────────────────────────────────────
 st.set_page_config(
@@ -155,15 +156,48 @@ def gc_dest(lat, lon, bearing, dist_m):
 def fetch_dem(lat, lon, az, dist_m, n=100):
     lats, lons = [], []
     for i in range(n):
-        p = gc_dest(lat, lon, az, i/(n-1)*dist_m)
-        lats.append(f"{p[0]:.7f}"); lons.append(f"{p[1]:.7f}")
-    url = f"https://api.open-meteo.com/v1/elevation?latitude={','.join(lats)}&longitude={','.join(lons)}"
-    r = requests.get(url, timeout=15); r.raise_for_status()
-    data = r.json()
-    if "elevation" not in data or not data["elevation"]:
-        raise ValueError("No elevation data")
-    elev = np.array(data["elevation"], dtype=float)
-    return np.linspace(0, dist_m, n), elev
+        p = gc_dest(lat, lon, az, i / (n - 1) * dist_m)
+        lats.append(round(p[0], 7))
+        lons.append(round(p[1], 7))
+
+    CHUNK = 25  # safe batch size for open-meteo (max 100, but 25 avoids rate limits)
+
+    def fetch_open_meteo(lat_chunk, lon_chunk):
+        url = (
+            "https://api.open-meteo.com/v1/elevation"
+            f"?latitude={','.join(str(x) for x in lat_chunk)}"
+            f"&longitude={','.join(str(x) for x in lon_chunk)}"
+        )
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        return r.json()["elevation"]
+
+    def fetch_open_elevation(lat_chunk, lon_chunk):
+        """Free fallback — open-elevation.com, no API key needed"""
+        locations = [{"latitude": la, "longitude": lo}
+                     for la, lo in zip(lat_chunk, lon_chunk)]
+        r = requests.post(
+            "https://api.open-elevation.com/api/v1/lookup",
+            json={"locations": locations},
+            timeout=20,
+        )
+        r.raise_for_status()
+        return [pt["elevation"] for pt in r.json()["results"]]
+
+    elev = []
+    for start in range(0, n, CHUNK):
+        lat_chunk = lats[start: start + CHUNK]
+        lon_chunk = lons[start: start + CHUNK]
+        try:
+            chunk_elev = fetch_open_meteo(lat_chunk, lon_chunk)
+        except Exception:
+            # fallback to open-elevation
+            chunk_elev = fetch_open_elevation(lat_chunk, lon_chunk)
+        elev.extend(chunk_elev)
+        if start + CHUNK < n:
+            time.sleep(0.15)  # small pause between chunks
+
+    return np.linspace(0, dist_m, n), np.array(elev, dtype=float)
 
 # ─────────────────────────────────────────────────────
 # PLOTLY CHART  — matches rfuniverse style exactly
