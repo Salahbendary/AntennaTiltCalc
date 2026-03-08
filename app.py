@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
 import zipfile, io, math
-import time
+
 # ─────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Antenna Downtilt Calculator",
@@ -151,53 +151,21 @@ def gc_dest(lat, lon, bearing, dist_m):
 # ─────────────────────────────────────────────────────
 # DEM FETCH
 # ─────────────────────────────────────────────────────
-
 @st.cache_data(show_spinner=False)
 def fetch_dem(lat, lon, az, dist_m, n=100):
     lats, lons = [], []
     for i in range(n):
-        p = gc_dest(lat, lon, az, i / (n - 1) * dist_m)
-        lats.append(round(p[0], 7))
-        lons.append(round(p[1], 7))
+        p = gc_dest(lat, lon, az, i/(n-1)*dist_m)
+        lats.append(f"{p[0]:.7f}"); lons.append(f"{p[1]:.7f}")
+    url = f"https://api.open-meteo.com/v1/elevation?latitude={','.join(lats)}&longitude={','.join(lons)}"
+    r = requests.get(url, timeout=15); r.raise_for_status()
+    data = r.json()
+    if "elevation" not in data or not data["elevation"]:
+        raise ValueError("No elevation data")
+    elev = np.array(data["elevation"], dtype=float)
+    return np.linspace(0, dist_m, n), elev
 
-    CHUNK = 25  # safe batch size for open-meteo (max 100, but 25 avoids rate limits)
-
-    def fetch_open_meteo(lat_chunk, lon_chunk):
-        url = (
-            "https://api.open-meteo.com/v1/elevation"
-            f"?latitude={','.join(str(x) for x in lat_chunk)}"
-            f"&longitude={','.join(str(x) for x in lon_chunk)}"
-        )
-        r = requests.get(url, timeout=15)
-        r.raise_for_status()
-        return r.json()["elevation"]
-
-    def fetch_open_elevation(lat_chunk, lon_chunk):
-        """Free fallback — open-elevation.com, no API key needed"""
-        locations = [{"latitude": la, "longitude": lo}
-                     for la, lo in zip(lat_chunk, lon_chunk)]
-        r = requests.post(
-            "https://api.open-elevation.com/api/v1/lookup",
-            json={"locations": locations},
-            timeout=20,
-        )
-        r.raise_for_status()
-        return [pt["elevation"] for pt in r.json()["results"]]
-
-    elev = []
-    for start in range(0, n, CHUNK):
-        lat_chunk = lats[start: start + CHUNK]
-        lon_chunk = lons[start: start + CHUNK]
-        try:
-            chunk_elev = fetch_open_meteo(lat_chunk, lon_chunk)
-        except Exception:
-            # fallback to open-elevation
-            chunk_elev = fetch_open_elevation(lat_chunk, lon_chunk)
-        elev.extend(chunk_elev)
-        if start + CHUNK < n:
-            time.sleep(0.15)  # small pause between chunks
-
-    return np.linspace(0, dist_m, n), np.array(elev, dtype=float)
+# ─────────────────────────────────────────────────────
 # PLOTLY CHART  — matches rfuniverse style exactly
 # ─────────────────────────────────────────────────────
 def build_chart(h_m, dt_deg, vbw_deg, dist_m, main_d, near_d, far_d,
@@ -223,16 +191,42 @@ def build_chart(h_m, dt_deg, vbw_deg, dist_m, main_d, near_d, far_d,
     y_min = float(np.min(terrain_y)) - 20
     y_max = site_elev + h_m + 50
 
-    # ── Signal classification for each x ──
-    in_foot   = (xs >= near_d) & (xs <= far_d)
-    main_above = main_ray >= terrain_y
-    strong    = main_above & ~in_foot
-    shadow    = ~main_above & ~in_foot
+    ant_z = site_elev + h_m  # antenna absolute elevation (MSL)
+
+    # ── LOS shadow detection ──────────────────────────────────────────────────
+    # A point at distance d is shadowed if ANY terrain sample between 0 and d
+    # rises ABOVE the straight line-of-sight from the antenna to that point.
+    # This is true terrain shadowing — not a flat-ray comparison.
+    def compute_los_clear(distances, terrain):
+        n = len(distances)
+        los_clear = np.ones(n, dtype=bool)
+        for i in range(1, n):
+            d_target = distances[i]
+            z_target = terrain[i]
+            if d_target <= 0:
+                continue
+            # LOS line height at each previous sample point
+            los_line = ant_z + (z_target - ant_z) * (distances[:i] / d_target)
+            # Shadowed if any intermediate terrain exceeds LOS line
+            if np.any(terrain[:i] > los_line + 0.1):   # 0.1 m tolerance
+                los_clear[i] = False
+        return los_clear
+
+    if has_dem:
+        # Compute LOS on dense xs grid by interpolating DEM
+        los_clear = compute_los_clear(xs, terrain_y)
+    else:
+        los_clear = np.ones(len(xs), dtype=bool)   # flat earth → no shadows
+
+    # ── Signal classification for each x ──────────────────────────────────────
+    in_foot = (xs >= near_d) & (xs <= far_d)
+    strong  = los_clear  & ~in_foot    # LOS clear, outside footprint  → green
+    shadow  = ~los_clear & ~in_foot    # LOS blocked, outside footprint → red
+    # in_foot → orange regardless of LOS (it is the coverage zone)
 
     # Segment arrays: green/red/orange on terrain surface
     def make_seg(mask):
-        y = np.where(mask, terrain_y, np.nan)
-        return y
+        return np.where(mask, terrain_y, np.nan)
 
     seg_green  = make_seg(strong)
     seg_red    = make_seg(shadow)
@@ -569,13 +563,21 @@ else:
 live_stats = None
 if has_dem and terrain_on:
     se_stats  = float(dem_elev[0])
-    # Ray height at each DEM sample using CURRENT h_m and dt_deg
-    ray_z     = se_stats + h_m - dem_d * np.tan(np.radians(dt_deg))
-    above_arr = ray_z >= dem_elev
-    n_above   = int(np.sum(above_arr))
-    avg_sig   = round(n_above / len(dem_d) * 100)
+    ant_z_stats = se_stats + h_m
+    # LOS-based shadow detection on actual DEM samples
+    n_dem = len(dem_d)
+    los_arr = np.ones(n_dem, dtype=bool)
+    for i in range(1, n_dem):
+        d_t = dem_d[i]
+        if d_t <= 0:
+            continue
+        los_line = ant_z_stats + (dem_elev[i] - ant_z_stats) * (dem_d[:i] / d_t)
+        if np.any(dem_elev[:i] > los_line + 0.1):
+            los_arr[i] = False
+    n_above   = int(np.sum(los_arr))
+    avg_sig   = round(n_above / n_dem * 100)
     shadow    = 100 - avg_sig
-    blocked   = ~above_arr
+    blocked   = ~los_arr
     first_obs = float(dem_d[np.argmax(blocked)]) if np.any(blocked) else None
     live_stats = dict(
         avg       = avg_sig,
