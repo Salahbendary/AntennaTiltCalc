@@ -10,7 +10,6 @@ import folium
 from streamlit_folium import st_folium
 import zipfile, io, math
 import time
-
 # ─────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Antenna Downtilt Calculator",
@@ -152,6 +151,7 @@ def gc_dest(lat, lon, bearing, dist_m):
 # ─────────────────────────────────────────────────────
 # DEM FETCH
 # ─────────────────────────────────────────────────────
+
 @st.cache_data(show_spinner=False)
 def fetch_dem(lat, lon, az, dist_m, n=100):
     lats, lons = [], []
@@ -198,8 +198,6 @@ def fetch_dem(lat, lon, az, dist_m, n=100):
             time.sleep(0.15)  # small pause between chunks
 
     return np.linspace(0, dist_m, n), np.array(elev, dtype=float)
-
-# ─────────────────────────────────────────────────────
 # PLOTLY CHART  — matches rfuniverse style exactly
 # ─────────────────────────────────────────────────────
 def build_chart(h_m, dt_deg, vbw_deg, dist_m, main_d, near_d, far_d,
@@ -225,42 +223,16 @@ def build_chart(h_m, dt_deg, vbw_deg, dist_m, main_d, near_d, far_d,
     y_min = float(np.min(terrain_y)) - 20
     y_max = site_elev + h_m + 50
 
-    ant_z = site_elev + h_m  # antenna absolute elevation (MSL)
-
-    # ── LOS shadow detection ──────────────────────────────────────────────────
-    # A point at distance d is shadowed if ANY terrain sample between 0 and d
-    # rises ABOVE the straight line-of-sight from the antenna to that point.
-    # This is true terrain shadowing — not a flat-ray comparison.
-    def compute_los_clear(distances, terrain):
-        n = len(distances)
-        los_clear = np.ones(n, dtype=bool)
-        for i in range(1, n):
-            d_target = distances[i]
-            z_target = terrain[i]
-            if d_target <= 0:
-                continue
-            # LOS line height at each previous sample point
-            los_line = ant_z + (z_target - ant_z) * (distances[:i] / d_target)
-            # Shadowed if any intermediate terrain exceeds LOS line
-            if np.any(terrain[:i] > los_line + 0.1):   # 0.1 m tolerance
-                los_clear[i] = False
-        return los_clear
-
-    if has_dem:
-        # Compute LOS on dense xs grid by interpolating DEM
-        los_clear = compute_los_clear(xs, terrain_y)
-    else:
-        los_clear = np.ones(len(xs), dtype=bool)   # flat earth → no shadows
-
-    # ── Signal classification for each x ──────────────────────────────────────
-    in_foot = (xs >= near_d) & (xs <= far_d)
-    strong  = los_clear  & ~in_foot    # LOS clear, outside footprint  → green
-    shadow  = ~los_clear & ~in_foot    # LOS blocked, outside footprint → red
-    # in_foot → orange regardless of LOS (it is the coverage zone)
+    # ── Signal classification for each x ──
+    in_foot   = (xs >= near_d) & (xs <= far_d)
+    main_above = main_ray >= terrain_y
+    strong    = main_above & ~in_foot
+    shadow    = ~main_above & ~in_foot
 
     # Segment arrays: green/red/orange on terrain surface
     def make_seg(mask):
-        return np.where(mask, terrain_y, np.nan)
+        y = np.where(mask, terrain_y, np.nan)
+        return y
 
     seg_green  = make_seg(strong)
     seg_red    = make_seg(shadow)
@@ -316,6 +288,23 @@ def build_chart(h_m, dt_deg, vbw_deg, dist_m, main_d, near_d, far_d,
         line=dict(color='#16a34a', width=2),
         name='Main lobe ray',
         hovertemplate='Main lobe: %{y:.1f} m<extra></extra>'
+    ))
+
+    # ── Blue fill between outer (far_ray) and inner (near_ray) lobe limits ──
+    # Add far_ray first as the base, then near_ray filled down to it
+    fig.add_trace(go.Scatter(
+        x=xs, y=far_ray,
+        line=dict(color='rgba(125,211,252,0)', width=0),
+        showlegend=False, name='_farlimit_fill',
+        hoverinfo='skip'
+    ))
+    fig.add_trace(go.Scatter(
+        x=xs, y=near_ray,
+        fill='tonexty',
+        fillcolor='rgba(125,211,252,0.25)',
+        line=dict(color='rgba(125,211,252,0)', width=0),
+        showlegend=False, name='_nearfill',
+        hoverinfo='skip'
     ))
 
     # ── Footprint lobe limits (dashed light blue) ──
@@ -597,21 +586,13 @@ else:
 live_stats = None
 if has_dem and terrain_on:
     se_stats  = float(dem_elev[0])
-    ant_z_stats = se_stats + h_m
-    # LOS-based shadow detection on actual DEM samples
-    n_dem = len(dem_d)
-    los_arr = np.ones(n_dem, dtype=bool)
-    for i in range(1, n_dem):
-        d_t = dem_d[i]
-        if d_t <= 0:
-            continue
-        los_line = ant_z_stats + (dem_elev[i] - ant_z_stats) * (dem_d[:i] / d_t)
-        if np.any(dem_elev[:i] > los_line + 0.1):
-            los_arr[i] = False
-    n_above   = int(np.sum(los_arr))
-    avg_sig   = round(n_above / n_dem * 100)
+    # Ray height at each DEM sample using CURRENT h_m and dt_deg
+    ray_z     = se_stats + h_m - dem_d * np.tan(np.radians(dt_deg))
+    above_arr = ray_z >= dem_elev
+    n_above   = int(np.sum(above_arr))
+    avg_sig   = round(n_above / len(dem_d) * 100)
     shadow    = 100 - avg_sig
-    blocked   = ~los_arr
+    blocked   = ~above_arr
     first_obs = float(dem_d[np.argmax(blocked)]) if np.any(blocked) else None
     live_stats = dict(
         avg       = avg_sig,
